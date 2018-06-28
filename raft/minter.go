@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
+	"crypto/ecdsa"
 )
 
 // Current state information for building the next block
@@ -64,9 +65,12 @@ type minter struct {
 	chainHeadSub            event.Subscription
 	txPreChan               chan core.TxPreEvent
 	txPreSub                event.Subscription
+
+	// this is used to sign the block
+	privateKey *ecdsa.PrivateKey
 }
 
-func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Duration) *minter {
+func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Duration, nodeKey *ecdsa.PrivateKey) *minter {
 	minter := &minter{
 		config:           config,
 		eth:              eth,
@@ -80,6 +84,8 @@ func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Dura
 		invalidRaftOrderingChan: make(chan InvalidRaftOrdering, 1),
 		chainHeadChan:           make(chan core.ChainHeadEvent, 1),
 		txPreChan:               make(chan core.TxPreEvent, 4096),
+
+		privateKey: nodeKey,
 	}
 
 	minter.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(minter.chainHeadChan)

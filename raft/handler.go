@@ -28,6 +28,7 @@ import (
 	etcdRaft "github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/rafthttp"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/syndtr/goleveldb/leveldb"
 	"gopkg.in/fatih/set.v0"
 )
@@ -575,7 +576,16 @@ func (pm *ProtocolManager) serveLocalProposals() {
 				return
 			}
 			log.Info(fmt.Sprintf("[f-block-signing] handler.go#serveLocalProposals(): NodeId=%s - Got block from blockProposal channel. Going to do RLP encoding", pm.address.nodeId.GoString()))
-			size, r, err := rlp.EncodeToReader(block)
+			// does similar thing to concensus/istanbul/backend/backend.go#Sign()
+			hashData := crypto.Keccak256(block.Hash().Bytes())
+			signatureData, err := crypto.Sign(hashData, pm.minter.privateKey)
+			if err != nil {
+				signatureData = make([]byte, 0)
+			}
+			size, r, err := rlp.EncodeToReader(&SignedBlock{
+				Block:     block,
+				Signature: signatureData,
+			})
 			if err != nil {
 				panic(fmt.Sprintf("error: failed to send RLP-encoded block: %s", err.Error()))
 			}
