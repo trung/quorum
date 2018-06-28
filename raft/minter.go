@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"crypto/ecdsa"
 	"github.com/eapache/channels"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
@@ -35,7 +36,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
-	"crypto/ecdsa"
 )
 
 // Current state information for building the next block
@@ -133,7 +133,8 @@ func (minter *minter) updateSpeculativeChainPerNewHead(newHeadBlock *types.Block
 
 func (minter *minter) updateSpeculativeChainPerInvalidSignature(headBlock *types.Block, invalidBlock *SignedBlock) {
 	invalidHash := invalidBlock.Block.Hash()
-	log.Info("Handling InvalidSignedBlock", "invalid block signature", invalidBlock.Signature, "block hash", invalidHash, "current head", headBlock.Hash())
+	signature := fmt.Sprintf("r: %x, s: %x", invalidBlock.R, invalidBlock.S)
+	log.Info("Handling InvalidSignedBlock", "invalid block signature", signature, "block hash", invalidHash, "current head", headBlock.Hash())
 
 	minter.mu.Lock()
 	defer minter.mu.Unlock()

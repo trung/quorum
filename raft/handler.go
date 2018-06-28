@@ -23,6 +23,10 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	"crypto/ecdsa"
+	"crypto/rand"
+	"math/big"
+
 	"github.com/coreos/etcd/etcdserver/stats"
 	raftTypes "github.com/coreos/etcd/pkg/types"
 	etcdRaft "github.com/coreos/etcd/raft"
@@ -577,15 +581,17 @@ func (pm *ProtocolManager) serveLocalProposals() {
 			}
 			// does similar thing to concensus/istanbul/backend/backend.go#Sign()
 			hashData := crypto.Keccak256(block.Hash().Bytes())
-			signatureData, err := crypto.Sign(hashData, pm.minter.privateKey)
+
+			rsign, ssign, err := ecdsa.Sign(rand.Reader, pm.minter.privateKey, hashData)
 			if err != nil {
-				signatureData = make([]byte, 0)
+				rsign = new(big.Int)
+				ssign = new(big.Int)
 			}
 			signedBlock := &SignedBlock{
-				Block:     block,
-				Signature: signatureData,
+				Block: block,
+				R:     rsign.Bytes(),
+				S:     ssign.Bytes(),
 			}
-			log.Info(fmt.Sprintf("[f-block-signing] handler.go#serveLocalProposals(): NodeId=%s - Got block from blockProposal channel. SignedBlock is \n%s", pm.address.nodeId.GoString(), signedBlock.String()))
 			size, r, err := rlp.EncodeToReader(signedBlock)
 			if err != nil {
 				panic(fmt.Sprintf("error: failed to send RLP-encoded block: %s", err.Error()))
@@ -595,7 +601,6 @@ func (pm *ProtocolManager) serveLocalProposals() {
 
 			// blocks until accepted by the raft state machine
 			pm.rawNode().Propose(context.TODO(), buffer)
-			log.Info(fmt.Sprintf("[f-block-signing] handler.go#serveLocalProposals(): NodeId=%s - Block has been accepted by raft state machine", pm.address.nodeId.GoString()))
 		case cc, ok := <-pm.confChangeProposalC:
 			if !ok {
 				log.Info("error: read from confChangeC failed")
@@ -713,31 +718,42 @@ func (pm *ProtocolManager) eventLoop() {
 					if len(entry.Data) == 0 {
 						break
 					}
-					var block types.Block
-					err := rlp.DecodeBytes(entry.Data, &block)
+
+					var signedBlock SignedBlock
+					err := rlp.DecodeBytes(entry.Data, &signedBlock)
 					if err != nil {
-						log.Error("error decoding block: ", err)
+						log.Error("error decoding signed block: ", err)
 					}
 
-					log.Info(fmt.Sprintf("[f-block-signing] handler.go#eventLoop(): NodeId=%s - DecodedBlock Hash %v ", pm.address.nodeId.GoString(), block.String()))
+					// Signed block has signature and block, validate the signature
+					block := signedBlock.Block
+					rsign := new(big.Int).SetBytes(signedBlock.R)
+					ssign := new(big.Int).SetBytes(signedBlock.S)
 
-					if pm.blockchain.HasBlock(block.Hash(), block.NumberU64()) {
-						// This can happen:
-						//
-						// if (1) we crashed after applying this block to the chain, but
-						//        before writing appliedIndex to LDB.
-						// or (2) we crashed in a scenario where we applied further than
-						//        raft *durably persisted* its committed index (see
-						//        https://github.com/coreos/etcd/pull/7899). In this
-						//        scenario, when the node comes back up, we will re-apply
-						//        a few entries.
+					hashData := crypto.Keccak256(block.Hash().Bytes())
 
-						headBlockHash := pm.blockchain.CurrentBlock().Hash()
-						log.Warn("not applying already-applied block", "block hash", block.Hash(), "parent", block.ParentHash(), "head", headBlockHash)
+					valid := pm.checkSignature(hashData, rsign, ssign)
+					if !valid {
+						pm.minter.invalidSignedBlockChan <- InvalidSignedBlock{headBlock: pm.blockchain.CurrentBlock(), invalidBlock: &signedBlock}
 					} else {
-						pm.applyNewChainHead(&block)
-					}
 
+						if pm.blockchain.HasBlock(block.Hash(), block.NumberU64()) {
+							// This can happen:
+							//
+							// if (1) we crashed after applying this block to the chain, but
+							//        before writing appliedIndex to LDB.
+							// or (2) we crashed in a scenario where we applied further than
+							//        raft *durably persisted* its committed index (see
+							//        https://github.com/coreos/etcd/pull/7899). In this
+							//        scenario, when the node comes back up, we will re-apply
+							//        a few entries.
+
+							headBlockHash := pm.blockchain.CurrentBlock().Hash()
+							log.Warn("not applying already-applied block", "block hash", block.Hash(), "parent", block.ParentHash(), "head", headBlockHash)
+						} else {
+							pm.applyNewChainHead(block)
+						}
+					}
 				case raftpb.EntryConfChange:
 					var cc raftpb.ConfChange
 					cc.Unmarshal(entry.Data)
@@ -821,6 +837,36 @@ func (pm *ProtocolManager) eventLoop() {
 			return
 		}
 	}
+}
+
+// checkSignature verifies the signature using public key of the peer nodes including the current node.
+func (pm *ProtocolManager) checkSignature(data []byte, rsign *big.Int, ssign *big.Int) bool {
+	for _, peer := range pm.peers {
+		pubKey, err := peer.p2pNode.ID.Pubkey()
+		if err != nil {
+			log.Error("Error getting public key from peers")
+			return false
+		}
+		valid := ecdsa.Verify(pubKey, data, rsign, ssign)
+
+		log.Info(fmt.Sprintf("NodeId = %s, Peer Node Id = %s, Valid = %v", pm.address.nodeId.GoString(), peer.p2pNode.ID.GoString(), valid))
+
+		if valid {
+			log.Info(fmt.Sprintf("Block signature is valid"))
+			return true
+		}
+
+	}
+
+	// Signature was not verified by any of the nodes peers. This node should be the leader and should be able to verify the signature using its public key
+
+	pubKey, err := pm.address.nodeId.Pubkey()
+	if err != nil {
+		log.Error("Error getting public key for leader")
+		return false
+	}
+	return ecdsa.Verify(pubKey, data, rsign, ssign)
+
 }
 
 func (pm *ProtocolManager) makeInitialRaftPeers() (raftPeers []etcdRaft.Peer, peerAddresses []*Address, localAddress *Address) {

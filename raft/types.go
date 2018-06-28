@@ -7,12 +7,13 @@ import (
 )
 
 type SignedBlock struct {
-	Signature []byte
-	Block     *types.Block
+	R     []byte
+	S     []byte
+	Block *types.Block
 }
 
 func (sb *SignedBlock) String() string {
-	return fmt.Sprintf(`Signature: %s
+	return fmt.Sprintf(`Signature: %x, %x
 %s
-`, string(sb.Signature), sb.Block.String())
+`, sb.R, sb.S, sb.Block.String())
 }
