@@ -11,3 +11,11 @@ type InvalidRaftOrdering struct {
 	// New block that should point to the head, but doesn't
 	invalidBlock *types.Block
 }
+
+type InvalidSignedBlock struct {
+	// Current head of the chain
+	headBlock *types.Block
+
+	// the block with invalid signature
+	invalidBlock *SignedBlock
+}

@@ -61,6 +61,7 @@ type minter struct {
 	speculativeChain *speculativeChain
 
 	invalidRaftOrderingChan chan InvalidRaftOrdering
+	invalidSignedBlockChan  chan InvalidSignedBlock
 	chainHeadChan           chan core.ChainHeadEvent
 	chainHeadSub            event.Subscription
 	txPreChan               chan core.TxPreEvent
@@ -82,6 +83,7 @@ func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Dura
 		speculativeChain: newSpeculativeChain(),
 
 		invalidRaftOrderingChan: make(chan InvalidRaftOrdering, 1),
+		invalidSignedBlockChan:  make(chan InvalidSignedBlock, 1),
 		chainHeadChan:           make(chan core.ChainHeadEvent, 1),
 		txPreChan:               make(chan core.TxPreEvent, 4096),
 
@@ -127,6 +129,16 @@ func (minter *minter) updateSpeculativeChainPerNewHead(newHeadBlock *types.Block
 	defer minter.mu.Unlock()
 
 	minter.speculativeChain.accept(newHeadBlock)
+}
+
+func (minter *minter) updateSpeculativeChainPerInvalidSignature(headBlock *types.Block, invalidBlock *SignedBlock) {
+	invalidHash := invalidBlock.Block.Hash()
+	log.Info("Handling InvalidSignedBlock", "invalid block signature", invalidBlock.Signature, "block hash", invalidHash, "current head", headBlock.Hash())
+
+	minter.mu.Lock()
+	defer minter.mu.Unlock()
+
+	minter.speculativeChain.unwindFrom(invalidHash, headBlock)
 }
 
 func (minter *minter) updateSpeculativeChainPerInvalidOrdering(headBlock *types.Block, invalidBlock *types.Block) {
@@ -182,6 +194,9 @@ func (minter *minter) eventLoop() {
 			invalidBlock := ev.invalidBlock
 
 			minter.updateSpeculativeChainPerInvalidOrdering(headBlock, invalidBlock)
+
+		case sb := <-minter.invalidSignedBlockChan:
+			minter.updateSpeculativeChainPerInvalidSignature(sb.headBlock, sb.invalidBlock)
 
 		// system stopped
 		case <-minter.chainHeadSub.Err():
