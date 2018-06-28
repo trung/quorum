@@ -575,17 +575,18 @@ func (pm *ProtocolManager) serveLocalProposals() {
 				log.Info("error: read from proposeC failed")
 				return
 			}
-			log.Info(fmt.Sprintf("[f-block-signing] handler.go#serveLocalProposals(): NodeId=%s - Got block from blockProposal channel. Going to do RLP encoding", pm.address.nodeId.GoString()))
 			// does similar thing to concensus/istanbul/backend/backend.go#Sign()
 			hashData := crypto.Keccak256(block.Hash().Bytes())
 			signatureData, err := crypto.Sign(hashData, pm.minter.privateKey)
 			if err != nil {
 				signatureData = make([]byte, 0)
 			}
-			size, r, err := rlp.EncodeToReader(&SignedBlock{
+			signedBlock := &SignedBlock{
 				Block:     block,
 				Signature: signatureData,
-			})
+			}
+			log.Info(fmt.Sprintf("[f-block-signing] handler.go#serveLocalProposals(): NodeId=%s - Got block from blockProposal channel. SignedBlock is \n%s", pm.address.nodeId.GoString(), signedBlock.String()))
+			size, r, err := rlp.EncodeToReader(signedBlock)
 			if err != nil {
 				panic(fmt.Sprintf("error: failed to send RLP-encoded block: %s", err.Error()))
 			}
@@ -690,7 +691,6 @@ func (pm *ProtocolManager) eventLoop() {
 		// when the node is first ready it gives us entries to commit and messages
 		// to immediately publish
 		case rd := <-pm.rawNode().Ready():
-			log.Info(fmt.Sprintf("[f-block-signing] handler.go#eventLoop(): NodeId=%s - Got Ready object from Read channel %v ", pm.address.nodeId.GoString(), len(rd.CommittedEntries)))
 			pm.wal.Save(rd.HardState, rd.Entries)
 
 			if snap := rd.Snapshot; !etcdRaft.IsEmptySnap(snap) {
