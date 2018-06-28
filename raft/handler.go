@@ -550,6 +550,7 @@ func (pm *ProtocolManager) minedBroadcastLoop() {
 	for obj := range pm.minedBlockSub.Chan() {
 		switch ev := obj.Data.(type) {
 		case core.NewMinedBlockEvent:
+			log.Debug("[f-block-signing] handler.go#minedBroadcastLoop(): NodeId=%s - Received MinedBlockEvent", pm.address.nodeId.GoString())
 			select {
 			case pm.blockProposalC <- ev.Block:
 			case <-pm.quitSync:
@@ -573,7 +574,7 @@ func (pm *ProtocolManager) serveLocalProposals() {
 				log.Info("error: read from proposeC failed")
 				return
 			}
-
+			log.Debug("[f-block-signing] handler.go#serveLocalProposals(): NodeId=%s - Got block from blockProposal channel. Going to do RLP encoding", pm.address.nodeId.GoString())
 			size, r, err := rlp.EncodeToReader(block)
 			if err != nil {
 				panic(fmt.Sprintf("error: failed to send RLP-encoded block: %s", err.Error()))
@@ -583,6 +584,7 @@ func (pm *ProtocolManager) serveLocalProposals() {
 
 			// blocks until accepted by the raft state machine
 			pm.rawNode().Propose(context.TODO(), buffer)
+			log.Debug("[f-block-signing] handler.go#serveLocalProposals(): NodeId=%s - Block has been accepted by raft state machine", pm.address.nodeId.GoString())
 		case cc, ok := <-pm.confChangeProposalC:
 			if !ok {
 				log.Info("error: read from confChangeC failed")
@@ -678,6 +680,7 @@ func (pm *ProtocolManager) eventLoop() {
 		// when the node is first ready it gives us entries to commit and messages
 		// to immediately publish
 		case rd := <-pm.rawNode().Ready():
+			log.Debug("[f-block-signing] handler.go#eventLoop(): NodeId=%s - Got Ready object from Read channel %v ", pm.address.nodeId.GoString(), rd)
 			pm.wal.Save(rd.HardState, rd.Entries)
 
 			if snap := rd.Snapshot; !etcdRaft.IsEmptySnap(snap) {

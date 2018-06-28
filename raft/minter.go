@@ -94,6 +94,7 @@ func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Dura
 }
 
 func (minter *minter) start() {
+	log.Debug("[f-block-signing] minter.go#start(): Address=%s", minter.coinbase.String())
 	atomic.StoreInt32(&minter.minting, 1)
 	minter.requestMinting()
 }
@@ -298,6 +299,7 @@ func (minter *minter) firePendingBlockEvents(logs []*types.Log) {
 func (minter *minter) mintNewBlock() {
 	minter.mu.Lock()
 	defer minter.mu.Unlock()
+	log.Debug("[f-block-signing] minter.go#mintNewBlock(): Start minting new block")
 
 	work := minter.createWork()
 	transactions := minter.getTransactions()
@@ -344,6 +346,7 @@ func (minter *minter) mintNewBlock() {
 
 	minter.speculativeChain.extend(block)
 
+	log.Debug("[f-block-signing] minter.go#mintNewBlock(): Post MinedBLockEvent for block %v", block)
 	minter.mux.Post(core.NewMinedBlockEvent{Block: block})
 
 	elapsed := time.Since(time.Unix(0, header.Time.Int64()))
