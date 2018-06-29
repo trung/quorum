@@ -119,6 +119,7 @@ var (
 		utils.RaftBlockTimeFlag,
 		utils.RaftJoinExistingFlag,
 		utils.RaftPortFlag,
+		utils.RaftLeaderRotation,
 		utils.EmitCheckpointsFlag,
 		utils.IstanbulRequestTimeoutFlag,
 		utils.IstanbulBlockPeriodFlag,

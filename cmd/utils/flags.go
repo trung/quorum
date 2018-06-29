@@ -502,6 +502,11 @@ var (
 		Usage: "Amount of time between raft block creations in milliseconds",
 		Value: 50,
 	}
+	RaftLeaderRotation = cli.IntFlag{
+		Name: "raftleaderrotatetime",
+		Usage: "Amount of time between raft leader rotation",
+		Value: 1000 * 60 * 60,
+	}
 	RaftJoinExistingFlag = cli.IntFlag{
 		Name:  "raftjoinexisting",
 		Usage: "The raft ID to assume when joining an pre-existing cluster",

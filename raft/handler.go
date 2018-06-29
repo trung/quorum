@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/syndtr/goleveldb/leveldb"
 	"gopkg.in/fatih/set.v0"
+	"sync/atomic"
 )
 
 type ProtocolManager struct {
@@ -92,13 +93,15 @@ type ProtocolManager struct {
 	// Storage
 	quorumRaftDb *leveldb.DB             // Persistent storage for last-applied raft index
 	raftStorage  *etcdRaft.MemoryStorage // Volatile raft storage
+
+	rotationTime time.Duration
 }
 
 //
 // Public interface
 //
 
-func NewProtocolManager(raftId uint16, raftPort uint16, blockchain *core.BlockChain, mux *event.TypeMux, bootstrapNodes []*discover.Node, joinExisting bool, datadir string, minter *minter, downloader *downloader.Downloader) (*ProtocolManager, error) {
+func NewProtocolManager(raftId uint16, raftPort uint16, blockchain *core.BlockChain, mux *event.TypeMux, bootstrapNodes []*discover.Node, joinExisting bool, datadir string, minter *minter, downloader *downloader.Downloader, rotationTime time.Duration) (*ProtocolManager, error) {
 	waldir := fmt.Sprintf("%s/raft-wal", datadir)
 	snapdir := fmt.Sprintf("%s/raft-snap", datadir)
 	quorumRaftDbLoc := fmt.Sprintf("%s/quorum-raft-state", datadir)
@@ -123,6 +126,7 @@ func NewProtocolManager(raftId uint16, raftPort uint16, blockchain *core.BlockCh
 		raftStorage:         etcdRaft.NewMemoryStorage(),
 		minter:              minter,
 		downloader:          downloader,
+		rotationTime:        rotationTime,
 	}
 
 	if db, err := openQuorumRaftDb(quorumRaftDbLoc); err != nil {
@@ -837,6 +841,19 @@ func (pm *ProtocolManager) eventLoop() {
 			return
 		}
 	}
+}
+
+func (pm *ProtocolManager) rotateLeader() {
+	throttleLeaderRotate := throttle(pm.rotationTime, func() {
+		// FIXME Does &minter.minting means this is leader??
+		if atomic.LoadInt32(&pm.minter.minting) == 1 {
+			if pm.role == minterRole {
+				// TODO randomize new leader id
+				// pm.rawNode().TransferLeadership(context.TODO(), pm., 1)
+			}
+		}
+	})
+	throttleLeaderRotate()
 }
 
 // checkSignature verifies the signature using public key of the peer nodes including the current node.
