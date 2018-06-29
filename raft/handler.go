@@ -55,6 +55,7 @@ type ProtocolManager struct {
 	snapshotIndex uint64 // The index of the latest snapshot.
 
 	// Remote peer state (protected by mu vs concurrent access via JS)
+	leader       uint16
 	peers        map[uint16]*Peer
 	removedPeers *set.Set // *Permanently removed* peers
 
@@ -696,6 +697,9 @@ func (pm *ProtocolManager) eventLoop() {
 		// when the node is first ready it gives us entries to commit and messages
 		// to immediately publish
 		case rd := <-pm.rawNode().Ready():
+			if rd.SoftState != nil {
+				pm.updateLeader(rd.SoftState.Lead)
+			}
 			pm.wal.Save(rd.HardState, rd.Entries)
 
 			if snap := rd.Snapshot; !etcdRaft.IsEmptySnap(snap) {
@@ -841,32 +845,22 @@ func (pm *ProtocolManager) eventLoop() {
 
 // checkSignature verifies the signature using public key of the peer nodes including the current node.
 func (pm *ProtocolManager) checkSignature(data []byte, rsign *big.Int, ssign *big.Int) bool {
-	for _, peer := range pm.peers {
-		pubKey, err := peer.p2pNode.ID.Pubkey()
-		if err != nil {
-			log.Error("Error getting public key from peers")
-			return false
-		}
-		valid := ecdsa.Verify(pubKey, data, rsign, ssign)
+	signedNode := pm.address.nodeId
 
-		log.Info(fmt.Sprintf("NodeId = %s, Peer Node Id = %s, Valid = %v", pm.address.nodeId.GoString(), peer.p2pNode.ID.GoString(), valid))
-
-		if valid {
-			log.Info(fmt.Sprintf("Block signature is valid"))
-			return true
-		}
-
+	if peer, ok := pm.peers[pm.leader]; ok {
+		signedNode = peer.address.nodeId
 	}
 
-	// Signature was not verified by any of the nodes peers. This node should be the leader and should be able to verify the signature using its public key
-
-	pubKey, err := pm.address.nodeId.Pubkey()
+	pubKey, err := signedNode.Pubkey()
 	if err != nil {
-		log.Error("Error getting public key for leader")
+		log.Error(fmt.Sprintf("Error getting public key for node %s", signedNode.GoString()))
 		return false
 	}
-	return ecdsa.Verify(pubKey, data, rsign, ssign)
 
+	valid := ecdsa.Verify(pubKey, data, rsign, ssign)
+	log.Info(fmt.Sprintf("Node %s signature valid? %v", signedNode.GoString(), valid))
+
+	return valid
 }
 
 func (pm *ProtocolManager) makeInitialRaftPeers() (raftPeers []etcdRaft.Peer, peerAddresses []*Address, localAddress *Address) {
@@ -941,4 +935,10 @@ func (pm *ProtocolManager) advanceAppliedIndex(index uint64) {
 	pm.mu.Lock()
 	pm.appliedIndex = index
 	pm.mu.Unlock()
+}
+
+func (pm *ProtocolManager) updateLeader(leader uint64) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.leader = uint16(leader)
 }
