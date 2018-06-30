@@ -618,6 +618,15 @@ web3._extend({
                        name: 'removePeer',
                        call: 'raft_removePeer',
                        params: 1
+               }),
+               new web3._extend.Method({
+                       name: 'rotateLeader',
+                       call: 'raft_rotateLeader'
+               }),
+               new web3._extend.Method({
+                       name: 'selectLeader',
+                       call: 'raft_selectLeader',
+                       params: 1
                })
        ]
 })

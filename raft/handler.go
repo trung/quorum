@@ -23,6 +23,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	"errors"
+
 	"github.com/coreos/etcd/etcdserver/stats"
 	raftTypes "github.com/coreos/etcd/pkg/types"
 	etcdRaft "github.com/coreos/etcd/raft"
@@ -880,4 +882,45 @@ func (pm *ProtocolManager) advanceAppliedIndex(index uint64) {
 	pm.mu.Lock()
 	pm.appliedIndex = index
 	pm.mu.Unlock()
+}
+
+// RotateLeader rotates the leader to the next peer
+func (pm *ProtocolManager) RotateLeader() (uint16, error) {
+	if pm.role == verifierRole {
+		return 0, errors.New("only current leader can force leader rotation")
+	}
+
+	// Find the total no of nodes and rotate the leader to the next node
+	totalNodes := len(pm.peers) + 1
+
+	newLeaderRaftId := (pm.raftId + 1) % uint16(totalNodes)
+	if newLeaderRaftId == 0 {
+		newLeaderRaftId = uint16(totalNodes)
+	}
+
+	log.Info(fmt.Sprintf("Transferring leadership from %d to %d", pm.raftId, newLeaderRaftId))
+
+	pm.rawNode().TransferLeadership(context.TODO(), uint64(pm.raftId), uint64(newLeaderRaftId))
+	return newLeaderRaftId, nil
+}
+
+// SelectLeader transfers the leadership to the specified newLeader
+func (pm *ProtocolManager) SelectLeader(newLeader uint16) (uint16, error) {
+	if pm.role == verifierRole {
+		return 0, errors.New("only current leader can force new leader selection")
+	}
+
+	totalNodes := len(pm.peers) + 1
+
+	if int(newLeader) > totalNodes {
+		return 0, errors.New("invalid new leader id")
+	}
+
+	if pm.raftId == newLeader {
+		return newLeader, errors.New("new leader is the current leader")
+	}
+
+	log.Info(fmt.Sprintf("Selecting new leader %d", newLeader))
+	pm.rawNode().TransferLeadership(context.TODO(), uint64(pm.raftId), uint64(newLeader))
+	return newLeader, nil
 }

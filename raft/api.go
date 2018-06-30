@@ -29,3 +29,11 @@ func (s *PublicRaftAPI) AddPeer(enodeId string) (uint16, error) {
 func (s *PublicRaftAPI) RemovePeer(raftId uint16) {
 	s.raftService.raftProtocolManager.ProposePeerRemoval(raftId)
 }
+
+func (s *PublicRaftAPI) RotateLeader() (uint16, error) {
+	return s.raftService.raftProtocolManager.RotateLeader()
+}
+
+func (s *PublicRaftAPI) SelectLeader(newLeader uint16) (uint16, error) {
+	return s.raftService.raftProtocolManager.SelectLeader(newLeader)
+}
