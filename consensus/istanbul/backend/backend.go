@@ -189,10 +189,6 @@ func (sb *backend) Commit(proposal istanbul.Proposal, seals [][]byte) error {
 		sb.commitCh <- block
 		return nil
 	}
-
-	if sb.broadcaster != nil {
-		sb.broadcaster.Enqueue(fetcherID, block)
-	}
 	return nil
 }
 
