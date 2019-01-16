@@ -5,7 +5,8 @@ go_import_path: github.com/ethereum/go-ethereum
 sudo: false
 matrix:
   include:
-    - os: linux
+    - if: tag IS blank
+      os: linux
       dist: trusty
       sudo: required
       go: 1.9.x
@@ -15,8 +16,8 @@ matrix:
         - sudo chown root:$USER /etc/fuse.conf
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
-
-    - os: osx
+    - if: tag IS blank
+      os: osx
       osx_image: xcode9.2 # so we don't have to deal with Kernel Extension Consent UI which is never possible in CI
       go: 1.9.x
       sudo: required
@@ -26,3 +27,40 @@ matrix:
         - brew cask install osxfuse
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
+
+    - if: tag IS present
+      os: linux
+      dist: trusty
+      sudo: required
+      go: 1.9.x
+      script:
+        - sudo modprobe fuse
+        - sudo chmod 666 /dev/fuse
+        - sudo chown root:$USER /etc/fuse.conf
+        - go run build/ci.go install
+        - sudo mkdir -p /dist
+        - tar cfvz /dist/geth_${TRAVIS_TAG}_linux_amd64.tar.gz build/bin/geth
+    - if: tag IS present
+      os: osx
+      osx_image: xcode9.2
+      go: 1.9.x
+      sudo: required
+      script:
+        - brew update
+        - brew install caskroom/cask/brew-cask
+        - brew cask install osxfuse
+        - go run build/ci.go install
+        - sudo mkdir -p /dist
+        - tar cfvz /dist/geth_${TRAVIS_TAG}_darwin_amd64.tar.gz build/bin/geth
+
+before_deploy:
+  - eval "echo `cat .bintray.json`" > /tmp/bintray.json
+deploy:
+  provider: bintray
+  file: /tmp/bintray.json
+  user: erolagnab
+  key:
+    secure: thSy5lWcWBWMgoiC2h7ZlXNvls7FZ9jePR7CESqLZV47K51kmqRh5NhhXaYzfGHTYNNJKiN2GO8A10XA7EMX6wthqAi/L2Voz/sqUGDqm0z6Ld1PQdGJS8Y1XIQ7VF/I33SeY4t5/ZPWVuqFS71ofbM5rpszqmUv9ZiRkoRJrTkg0m6BJC+XSnNmBaJ+kiyhSE+dJz9q0vJzd9x6LFDHPyKHFRkbJ5IRhgN5dKjppz6/MnKolOsKH2fTh/XsD9Fbu3BziQ1cYCD7V/MgJ6LWoAv+W/+2xFNJZ/gt3TSyCt4bjqg5e1imPw3+CFhp6hewG/f2W1n74FK7FrZflb6E0PedLYCEUc+DaMQC6m3QQSgK/v5KydDRMFw80pSKm7EWPCKUCDdlqet/VqFNVgqUqL8sneKBaACRk/3hWQDM079mI9YzSzdtXPnV5QZ9iNisUtMafK9zlrHwagFNMhA09Fac3bMqpvEe1rcigE32WaYgtWMX0xhZ97R+BNuqDQuxIsJrcQ4qEvoyAgcxfutBCK4bEdsPrz2UbpdmhWTRXhbjuWo+SWdEZpbf3DJL2CQNNaV+hjiA31SFcssoM5jCxYw0XKWeFTkGnE3LPy5H0qS0FwSpea2eQ4wAJZo+rpSJ1BFldElwayoNPLr5Eheafg1ieHaYS+aNvEmluhbLvdA=
+  skip_cleanup: true
+  on:
+    tags: true
