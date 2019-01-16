@@ -46,7 +46,7 @@ matrix:
         - sudo tar cfvz /dist/geth_${TRAVIS_TAG}_darwin_amd64.tar.gz geth
 
 before_deploy:
-  - sed -e "s/_TRAVIS_TAG_/${TRAVIS_TAG}/g" -e "s/_TRAVIS_BUILD_NUMBER_/${TRAVIS_BUILD_NUMBER}/g" > /tmp/bintray.json
+  - sed -e "s/_TRAVIS_TAG_/${TRAVIS_TAG}/g" -e "s/_TRAVIS_BUILD_NUMBER_/${TRAVIS_BUILD_NUMBER}/g" ${TRAVIS_BUILD_DIR}/.bintray.json > /tmp/bintray.json
 deploy:
   provider: bintray
   file: /tmp/bintray.json
