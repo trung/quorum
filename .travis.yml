@@ -32,22 +32,18 @@ matrix:
       os: linux
       dist: trusty
       script:
-        - sudo modprobe fuse
-        - sudo chmod 666 /dev/fuse
-        - sudo chown root:$USER /etc/fuse.conf
-        - go run build/ci.go install
+        - build/env.sh go run build/ci.go install ./cmd/geth
         - sudo mkdir -p /dist
-        - tar cfvz /dist/geth_${TRAVIS_TAG}_linux_amd64.tar.gz build/bin/geth
+        - cd build/bin
+        - sudo tar cfvz /dist/geth_${TRAVIS_TAG}_linux_amd64.tar.gz geth
     - if: tag IS present
       os: osx
       osx_image: xcode9.2
       script:
-        - brew update
-        - brew install caskroom/cask/brew-cask
-        - brew cask install osxfuse
-        - go run build/ci.go install
+        - build/env.sh go run build/ci.go install ./cmd/geth
         - sudo mkdir -p /dist
-        - tar cfvz /dist/geth_${TRAVIS_TAG}_darwin_amd64.tar.gz build/bin/geth
+        - cd buid/bin
+        - sudo tar cfvz /dist/geth_${TRAVIS_TAG}_darwin_amd64.tar.gz geth
 
 before_deploy:
   - eval "echo `cat .bintray.json`" > /tmp/bintray.json
