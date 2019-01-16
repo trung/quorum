@@ -9,15 +9,15 @@
     ]
   },
   "version": {
-    "name": "${TRAVIS_TAG}",
-    "desc": "This is done automatically via Travis build #${TRAVIS_BUILD_NUMBER}",
-    "vcs_tag": "${TRAVIS_TAG}",
+    "name": "_TRAVIS_TAG_",
+    "desc": "This is done automatically via Travis build #_TRAVIS_BUILD_NUMBER_",
+    "vcs_tag": "_TRAVIS_TAG_",
     "gpgSign": true
   },
   "files": [
     {
       "includePattern": "/dist/(.*.tar.gz)",
-      "uploadPattern": "${TRAVIS_TAG}/$1",
+      "uploadPattern": "_TRAVIS_TAG_/$1",
       "matrixParams": {
         "override": 1
       }
