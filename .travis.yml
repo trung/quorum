@@ -42,7 +42,7 @@ matrix:
       script:
         - build/env.sh go run build/ci.go install ./cmd/geth
         - sudo mkdir -p /dist
-        - cd buid/bin
+        - cd build/bin
         - sudo tar cfvz /dist/geth_${TRAVIS_TAG}_darwin_amd64.tar.gz geth
 
 before_deploy:
