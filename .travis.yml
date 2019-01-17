@@ -46,7 +46,16 @@ matrix:
         - sudo tar cfvz /dist/geth_${TRAVIS_TAG}_darwin_amd64.tar.gz geth
 
 before_deploy:
-  - sed -e "s/_TRAVIS_TAG_/${TRAVIS_TAG}/g" -e "s/_TRAVIS_BUILD_NUMBER_/${TRAVIS_BUILD_NUMBER}/g" ${TRAVIS_BUILD_DIR}/.bintray.json > /tmp/bintray.json
+  - export GETH_VERSION=$(cat ${TRAVIS_BUILD_DIR}/VERSION)
+  - export RELEASED_DATE=$(date +'%Y-%m-%d')
+  - |
+    sed -e "s/_TRAVIS_TAG_/${TRAVIS_TAG}/g" \
+        -e "s/_TRAVIS_BUILD_NUMBER_/${TRAVIS_BUILD_NUMBER}/g" \
+        -e "s/_GETH_VERSION_/${GETH_VERSION}/g" \
+        -e "s/_RELEASED_DATE_/${RELEASED_DATE}/g" \
+        -e "s/_TRAVIS_COMMIT_/${TRAVIS_COMMIT}/g" \
+        -e "s/_TRAVIS_JOB_WEB_URL_/${TRAVIS_JOB_WEB_URL}/g" \
+        ${TRAVIS_BUILD_DIR}/.bintray.json > /tmp/bintray.json
 deploy:
   provider: bintray
   file: /tmp/bintray.json
