@@ -48,6 +48,7 @@ matrix:
 before_deploy:
   - export GETH_VERSION=$(cat ${TRAVIS_BUILD_DIR}/VERSION)
   - export RELEASED_DATE=$(date +'%Y-%m-%d')
+  - echo ${TRAVIS_JOB_WEB_URL}
   - |
     sed -e "s/_TRAVIS_TAG_/${TRAVIS_TAG}/g" \
         -e "s/_TRAVIS_BUILD_NUMBER_/${TRAVIS_BUILD_NUMBER}/g" \
