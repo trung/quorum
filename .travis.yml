@@ -66,8 +66,19 @@ before_deploy:
         -e "s/_ORGANIZATION_/${BINTRAY_ORGANIZATION}/g" \
         ${TRAVIS_BUILD_DIR}/.bintray.json > /tmp/bintray.json
 after_deploy:
+  - echo "Wait until ${OUTPUT_FILE} is published"
   - |
-    sleep 3
+    published=""
+    while [ "$published" == "" ]; do
+      sleep 5
+      result=$(curl "https://api.bintray.com/packages/${BINTRAY_ORGANIZATION}/quorum/geth/${TRAVIS_TAG}/files?include_unpublished=0")
+      echo "$result"
+      if [[ "$result" == *"${OUTPUT_FILE}"* ]]; then
+        published="done"
+      fi
+    done
+  - echo "Add ${OUTPUT_FILE} to Download List"
+  - |
     curl -u ${BINTRAY_USER}:${BINTRAY_API_KEY} \
         -H "Content-type: application/json" \
         -X PUT \
