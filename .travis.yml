@@ -37,8 +37,7 @@ matrix:
     - if: tag IS present
       os: linux
       dist: xenial
-      env:
-        - OUTPUT_FILE=geth_${TRAVIS_TAG}_linux_amd64.tar.gz
+      env: OUTPUT_FILE=geth_${TRAVIS_TAG}_linux_amd64.tar.gz
       script:
         - build/env.sh go run build/ci.go install ./cmd/geth
         - sudo mkdir -p /dist
@@ -68,12 +67,11 @@ before_deploy:
         ${TRAVIS_BUILD_DIR}/.bintray.json > /tmp/bintray.json
 after_deploy:
   - |
-    echo https://api.bintray.com/file_metadata/${BINTRAY_ORGANIZATION}/quorum/${TRAVIS_TAG}/${OUTPUT_FILE}
+    sleep 3
     curl -u ${BINTRAY_USER}:${BINTRAY_API_KEY} \
         -H "Content-type: application/json" \
         -X PUT \
-        --data '{"list_in_downloads": true}' \
-        -v \
+        --data "{\"list_in_downloads\": true}" \
         https://api.bintray.com/file_metadata/${BINTRAY_ORGANIZATION}/quorum/${TRAVIS_TAG}/${OUTPUT_FILE}
 deploy:
   provider: bintray
