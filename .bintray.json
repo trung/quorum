@@ -2,7 +2,7 @@
   "package": {
     "name": "geth",
     "repo": "quorum",
-    "subject": "trun9",
+    "subject": "_ORGANIZATION_",
     "vcs_url": "https://github.com/jpmorganchase/quorum",
     "licenses": [
       "LGPL-3.0"

@@ -7,6 +7,10 @@ sudo: true
 branches:
   only:
     - /.*/ # everything including tags
+env:
+  global:
+    - BINTRAY_ORGANIZATION=trun9
+    - BINTRAY_USER=erolagnab
 matrix:
   include:
     - if: tag IS blank
@@ -30,20 +34,23 @@ matrix:
 
     - if: tag IS present
       os: linux
-      dist: trusty
+      dist: xenial
+      env:
+      - OUTPUT_FILE=geth_${TRAVIS_TAG}_linux_amd64.tar.gz
       script:
         - build/env.sh go run build/ci.go install ./cmd/geth
         - sudo mkdir -p /dist
         - cd build/bin
-        - sudo tar cfvz /dist/geth_${TRAVIS_TAG}_linux_amd64.tar.gz geth
+        - sudo tar cfvz /dist/${OUTPUT_FILE} geth
     - if: tag IS present
       os: osx
       osx_image: xcode9.2
+      env: OUTPUT_FILE=geth_${TRAVIS_TAG}_darwin_amd64.tar.gz
       script:
         - build/env.sh go run build/ci.go install ./cmd/geth
         - sudo mkdir -p /dist
         - cd build/bin
-        - sudo tar cfvz /dist/geth_${TRAVIS_TAG}_darwin_amd64.tar.gz geth
+        - sudo tar cfvz /dist/${OUTPUT_FILE} geth
 
 before_deploy:
   - export GETH_VERSION=$(cat ${TRAVIS_BUILD_DIR}/VERSION)
@@ -55,11 +62,20 @@ before_deploy:
         -e "s/_RELEASED_DATE_/${RELEASED_DATE}/g" \
         -e "s/_TRAVIS_COMMIT_/${TRAVIS_COMMIT}/g" \
         -e "s/_TRAVIS_JOB_WEB_URL_/${TRAVIS_JOB_WEB_URL//\//\\/}/g" \
+        -e "s/_ORGANIZATION_/${BINTRAY_ORGANIZATION}/g" \
         ${TRAVIS_BUILD_DIR}/.bintray.json > /tmp/bintray.json
+after_deploy:
+  - secure: "N4Zs5/HFhiuCmOFQotpFMBMaKAUpNv5h1NCpthkTWLBpa1LbQWxOQZ6xxQayPM7z3uCyoZ/+U/u6tQ+OsiAO/QQ16zpOxPjPwbwBm6FHAiQuRHWuCp9FGBoqBfCDi+s9vZn/6cm8kXU7QUN+bzOg5THHmHkJItusLrTtia/gQZI4//bc2IKsLz6X5DVv33Pr10Vk+4k+E6Wb55NTbbgcc9wWh01n0Q+xv60UFfGEpdcfAX9+PG3Hu+y7ufCItCFyJI2euv50usJXHszDdPnizWL0vTEf9DpNU9LeCHZJ9g9azsEztr1lWc38LZzHv5tSad5ahfdwO8P0YldSO/o0JefzlG3eqraNv6oxaNvXtPUjnEWBrp/hkBDoPl649ZT5gqe7EqhQiQnRWSMXpqSQ2UXTTarRg0Qp2hCz0qT3x92o/qmaJm+lUmfHhvUg3aT379G2K8layWCCkTa+1NONShmRMk+OTrUd7wyrvKFQQEY5TUFtNruN29wxjMGDSn5l99hrhri5ImJdVPTP2FjLfYhBwhTXiXOgOpbhYQ/aPEgllS1w5rpIr4XycRUx0ZSz4bcJwP51jF5lBBwK6b16wK7lFGS4/veJ2RNecvp894MWNY8dYS31CpMs5lbwwm5YHUUwYyY3NRKWokK9lvYHC7zzFeDov8hdVenGahL/0jA="
+  - |
+    curl -u ${BINTRAY_USER}:${BINTRAY_API_KEY} \
+        -H "Content-type: application/json"
+        -X PUT \
+        https://api.bintray.com/file_metadata/${BINTRAY_ORGANIZATION}/quorum/${TRAVIS_TAG}/${OUTPUT_FILE} \
+        --data '{"list_in_downloads": true}'
 deploy:
   provider: bintray
   file: /tmp/bintray.json
-  user: erolagnab
+  user: ${BINTRAY_USER}
   key:
     secure: thSy5lWcWBWMgoiC2h7ZlXNvls7FZ9jePR7CESqLZV47K51kmqRh5NhhXaYzfGHTYNNJKiN2GO8A10XA7EMX6wthqAi/L2Voz/sqUGDqm0z6Ld1PQdGJS8Y1XIQ7VF/I33SeY4t5/ZPWVuqFS71ofbM5rpszqmUv9ZiRkoRJrTkg0m6BJC+XSnNmBaJ+kiyhSE+dJz9q0vJzd9x6LFDHPyKHFRkbJ5IRhgN5dKjppz6/MnKolOsKH2fTh/XsD9Fbu3BziQ1cYCD7V/MgJ6LWoAv+W/+2xFNJZ/gt3TSyCt4bjqg5e1imPw3+CFhp6hewG/f2W1n74FK7FrZflb6E0PedLYCEUc+DaMQC6m3QQSgK/v5KydDRMFw80pSKm7EWPCKUCDdlqet/VqFNVgqUqL8sneKBaACRk/3hWQDM079mI9YzSzdtXPnV5QZ9iNisUtMafK9zlrHwagFNMhA09Fac3bMqpvEe1rcigE32WaYgtWMX0xhZ97R+BNuqDQuxIsJrcQ4qEvoyAgcxfutBCK4bEdsPrz2UbpdmhWTRXhbjuWo+SWdEZpbf3DJL2CQNNaV+hjiA31SFcssoM5jCxYw0XKWeFTkGnE3LPy5H0qS0FwSpea2eQ4wAJZo+rpSJ1BFldElwayoNPLr5Eheafg1ieHaYS+aNvEmluhbLvdA=
   skip_cleanup: true
