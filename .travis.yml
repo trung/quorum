@@ -68,11 +68,13 @@ before_deploy:
         ${TRAVIS_BUILD_DIR}/.bintray.json > /tmp/bintray.json
 after_deploy:
   - |
+    echo https://api.bintray.com/file_metadata/${BINTRAY_ORGANIZATION}/quorum/${TRAVIS_TAG}/${OUTPUT_FILE}
     curl -u ${BINTRAY_USER}:${BINTRAY_API_KEY} \
         -H "Content-type: application/json" \
         -X PUT \
-        https://api.bintray.com/file_metadata/${BINTRAY_ORGANIZATION}/quorum/${TRAVIS_TAG}/${OUTPUT_FILE} \
-        --data '{"list_in_downloads": true}'
+        --data '{"list_in_downloads": true}' \
+        -v \
+        https://api.bintray.com/file_metadata/${BINTRAY_ORGANIZATION}/quorum/${TRAVIS_TAG}/${OUTPUT_FILE}
 deploy:
   provider: bintray
   file: /tmp/bintray.json
