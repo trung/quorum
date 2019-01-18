@@ -54,9 +54,10 @@ matrix:
         - sudo tar cfvz /dist/${OUTPUT_FILE} geth
 
 before_deploy:
-  - export GETH_VERSION=$(cat ${TRAVIS_BUILD_DIR}/VERSION)
-  - export RELEASED_DATE=$(date +'%Y-%m-%d')
   - |
+    echo "Prepare Bintray descriptor"
+    export GETH_VERSION=$(cat ${TRAVIS_BUILD_DIR}/VERSION)
+    export RELEASED_DATE=$(date +'%Y-%m-%d')
     sed -e "s/_TRAVIS_TAG_/${TRAVIS_TAG}/g" \
         -e "s/_TRAVIS_BUILD_NUMBER_/${TRAVIS_BUILD_NUMBER}/g" \
         -e "s/_GETH_VERSION_/${GETH_VERSION}/g" \
@@ -66,19 +67,19 @@ before_deploy:
         -e "s/_ORGANIZATION_/${BINTRAY_ORGANIZATION}/g" \
         ${TRAVIS_BUILD_DIR}/.bintray.json > /tmp/bintray.json
 after_deploy:
-  - echo "Wait until ${OUTPUT_FILE} is published"
   - |
     published=""
     while [ "$published" == "" ]; do
+      echo "Sleep 5s to wait until ${OUTPUT_FILE} is published"
       sleep 5
-      result=$(curl -u ${BINTRAY_USER}:${BINTRAY_API_KEY} "https://api.bintray.com/packages/${BINTRAY_ORGANIZATION}/quorum/geth/versions/${TRAVIS_TAG}/files?include_unpublished=0")
+      result=$(curl -u ${BINTRAY_USER}:${BINTRAY_API_KEY} "https://api.bintray.com/packages/${BINTRAY_ORGANIZATION}/quorum/geth/versions/${TRAVIS_TAG}/files")
       echo "$result"
       if [[ "$result" == *"${OUTPUT_FILE}"* ]]; then
         published="done"
       fi
     done
-  - echo "Add ${OUTPUT_FILE} to Download List"
   - |
+    echo "Add ${OUTPUT_FILE} to Download List"
     curl -u ${BINTRAY_USER}:${BINTRAY_API_KEY} \
         -H "Content-type: application/json" \
         -X PUT \
