@@ -71,7 +71,7 @@ after_deploy:
     published=""
     while [ "$published" == "" ]; do
       sleep 5
-      result=$(curl "https://api.bintray.com/packages/${BINTRAY_ORGANIZATION}/quorum/geth/${TRAVIS_TAG}/files?include_unpublished=0")
+      result=$(curl -u ${BINTRAY_USER}:${BINTRAY_API_KEY} "https://api.bintray.com/packages/${BINTRAY_ORGANIZATION}/quorum/geth/${TRAVIS_TAG}/files?include_unpublished=0")
       echo "$result"
       if [[ "$result" == *"${OUTPUT_FILE}"* ]]; then
         published="done"
