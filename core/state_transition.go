@@ -217,17 +217,19 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	} else {
 		data = st.data
 	}
-
+	log.Debug("--xxx--StateTransition.TransitionDB", "st.gas", st.gas, "msg.gas", msg.Gas(), "st.gaspool", st.gp, "data.len", len(data), "isPrivate", isPrivate)
 	// Pay intrinsic gas. For a private contract this is done using the public hash passed in,
 	// not the private data retrieved above. This is because we need any (participant) validator
 	// node to get the same result as a (non-participant) minter node, to avoid out-of-gas issues.
 	gas, err := IntrinsicGas(st.data, contractCreation, homestead)
+	log.Debug("--xxx--StateTransition.TransitionDB:after intrinsicgas", "gas", gas, "st.gaspool", st.gp)
 	if err != nil {
 		return nil, 0, false, err
 	}
 	if err = st.useGas(gas); err != nil {
 		return nil, 0, false, err
 	}
+	log.Debug("--xxx--StateTransition.TransitionDB:after use intrinsic gas", "st.gas", st.gas,  "st.gaspool", st.gp)
 
 	var (
 		leftoverGas uint64
@@ -254,11 +256,13 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		}
 		//if input is empty for the smart contract call, return
 		if len(data) == 0 && isPrivate {
+			st.refundGas()
 			return nil, 0, false, nil
 		}
 
 		ret, leftoverGas, vmerr = evm.Call(sender, to, data, st.gas, st.value)
 	}
+	log.Debug("--xxx--StateTransition.TransitionDB:after evm call", "st.gas", st.gas,  "st.gaspool", st.gp)
 	if vmerr != nil {
 		log.Info("VM returned with error", "err", vmerr)
 		// The only possible consensus-error would be if there wasn't
@@ -276,7 +280,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	if !isPrivate {
 		st.gas = leftoverGas
 	}
-
+	log.Debug("--xxx--StateTransition.TransitionDB:after big if", "st.gas", st.gas,  "st.gaspool", st.gp)
 	st.refundGas()
 	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 
@@ -287,12 +291,15 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 }
 
 func (st *StateTransition) refundGas() {
+	log.Debug("--xxx--StateTransition.refundGas:begin", "st.gas", st.gas,  "st.gaspool", st.gp)
+
 	// Apply refund counter, capped to half of the used gas.
 	refund := st.gasUsed() / 2
 	if refund > st.state.GetRefund() {
 		refund = st.state.GetRefund()
 	}
 	st.gas += refund
+	log.Debug("--xxx--StateTransition.refundGas:add refund", "st.gas", st.gas,  "st.gaspool", st.gp, "refund", refund)
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), st.gasPrice)
@@ -301,6 +308,7 @@ func (st *StateTransition) refundGas() {
 	// Also return remaining gas to the block gas counter so it is
 	// available for the next transaction.
 	st.gp.AddGas(st.gas)
+	log.Debug("--xxx--StateTransition.refundGas:end", "st.gas", st.gas,  "st.gaspool", st.gp)
 }
 
 // gasUsed returns the amount of gas used up by the state transition.

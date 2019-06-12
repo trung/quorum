@@ -17,6 +17,8 @@
 package core
 
 import (
+	"os"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -24,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -68,12 +71,19 @@ func (p *StateProcessor) Process(block *types.Block, statedb, privateState *stat
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
 	}
+	// hack
+	if _, ok := os.LookupEnv("Q_DEBUG"); ok {
+		gp = new(GasPool).AddGas(57351)
+	}
+	log.Debug("--xxx--StateProcessor.Process", "block.gasLimit", block.GasLimit())
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
 		privateState.Prepare(tx.Hash(), block.Hash(), i)
 
+		log.Debug("--xxx--StateProcessor.Process:looping txs:before ApplyTransaction", "i", i, "gaspool", gp, "tx.gas", tx.Gas())
 		receipt, privateReceipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, privateState, header, tx, usedGas, cfg)
+		log.Debug("--xxx--StateProcessor.Process:looping txs:after ApplyTransaction", "i", i, "gaspool", gp, "tx.gas", tx.Gas())
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}

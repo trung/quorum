@@ -595,6 +595,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrNegativeValue
 	}
 	// Ensure the transaction doesn't exceed the current block limit gas.
+	log.Debug("--xxx--TxPool.validateTx", "pool.currentMaxGas", pool.currentMaxGas, "tx.gas", tx.Gas())
 	if pool.currentMaxGas < tx.Gas() {
 		return ErrGasLimit
 	}

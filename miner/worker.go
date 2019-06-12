@@ -779,8 +779,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	}
 
 	var coalescedLogs []*types.Log
-
+	i := 0
 	for {
+		log.Debug("--xxx--worker.commitTransactions:before", "i", i, "gaspool", w.current.gasPool)
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
 		// (2) worker start or restart, the interrupt signal is 1
@@ -857,6 +858,8 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txs.Shift()
 		}
+		log.Debug("--xxx--worker.commitTransactions:after", "i", i, "gaspool", w.current.gasPool)
+		i++
 	}
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
