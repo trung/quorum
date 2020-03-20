@@ -1,0 +1,283 @@
+name: Pull Request Check
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - .gitignore
+jobs:
+  unit-tests:
+    name: Run `make test` in ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest"]
+    env:
+      GOPATH: ${{ github.workspace }}/go
+      WORKING_DIR: ${{ github.workspace }}/go/src/github.com/ethereum/go-ethereum
+      QUORUM_IGNORE_TEST_PACKAGES: github.com/ethereum/go-ethereum/swarm,github.com/ethereum/go-ethereum/cmd/swarm,github.com/ethereum/go-ethereum/mobile
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup Go 1.11
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.11
+      - name: Check out project files
+        uses: actions/checkout@574281d
+        with:
+          submodules: recursive
+          path: ${{ env.WORKING_DIR }}
+      - name: Prepare environment
+        run: |
+          echo "::add-path::$(go env GOPATH)/bin"
+      - name: Run tests
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          make test
+  build:
+    name: Build
+    if: success()
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup Go 1.11
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.11
+      - name: Check out project files
+        uses: actions/checkout@v2
+      - name: Build
+        run: |
+          make geth
+      - name: Upload `geth`
+        if: success()
+        uses: actions/upload-artifact@v1
+        with:
+          name: geth-bin
+          path: build/bin
+  acceptance-tests:
+    name: Run `${{ matrix.consensus }}` acctests in ${{ matrix.os }}
+    needs:
+      - build
+    if: success()
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest"]
+        consensus: ["raft", "istanbul", "clique"]
+    runs-on: ${{ matrix.os }}
+    env:
+      ACCTESTS_WORKING_DIR: quorum-acceptance-tests # rooted under github.workspace
+      SOLC_VERSION: 0.5.4
+      GAUGE_VERSION: 1.0.7
+    steps:
+      - name: Setup Java 11
+        uses: actions/setup-java@v1
+        with:
+          java-version: 11.0.x
+      - name: Download `geth`
+        uses: actions/download-artifact@v1
+        with:
+          name: geth-bin
+      - name: Setup `geth`
+        working-directory: ${{ github.workspace }}/geth-bin
+        run: |
+          mkdir -p tools
+          # create a dummy file in tools folder so actions/cache won't fail
+          touch tools/dummy
+          chmod +x geth
+      - name: Check out quorum-acceptance-tests
+        uses: actions/checkout@v2
+        with:
+          repository: jpmorganchase/quorum-acceptance-tests
+          path: ${{ env.ACCTESTS_WORKING_DIR }}
+      - name: Load cached tools
+        id: cached-tools
+        uses: actions/cache@v1
+        with:
+          path: ${{ github.workspace }}/geth-bin/tools
+          key: ${{ runner.os }}-tools-${{ hashFiles('geth-bin/tools/**') }}
+          restore-keys: ${{ runner.os }}-tools-
+      - name: Setup tools
+        if: steps.cached-tools.outputs.cache-hit != 'true'
+        working-directory: ${{ github.workspace }}/geth-bin/tools
+        run: |
+          echo "Downloading solc@${{ env.SOLC_VERSION }}"
+          curl -L https://github.com/ethereum/solidity/releases/download/v${{ env.SOLC_VERSION }}/solc-static-linux -o solc
+          echo "Downloading gauge@${{ env.GAUGE_VERSION }}"
+          curl -L https://github.com/getgauge/gauge/releases/download/v${{ env.GAUGE_VERSION }}/gauge-${{ env.GAUGE_VERSION }}-linux.x86_64.zip -o gauge.zip && unzip gauge.zip
+          echo "Configure tools"
+          chmod +x solc gauge
+      - name: Configure PATH
+          echo "::add-path::${{ github.workspace }}/geth-bin"
+          echo "::add-path::${{ github.workspace }}/geth-bin/tools"
+      - name: Load cached dependencies
+        uses: actions/cache@v1
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+      - name: Provision Quorum Network
+        if: success()
+        working-directory: ${{ env.ACCTESTS_WORKING_DIR }}
+        run: |
+          geth version
+          solc --version
+          gauge --version
+      - name: Run acceptance tests
+        if: success()
+        working-directory: ${{ env.ACCTESTS_WORKING_DIR }}
+        run: |
+          mvn clean
+      - name: Destroy Quorum Network
+        if: always()
+        working-directory: ${{ env.ACCTESTS_WORKING_DIR }}
+        run: |
+          echo "Clean up"
+  notify:
+    name: Notify Slack
+    needs:
+      - unit-tests
+      - acceptance-tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare Slack message
+        id: status
+        uses: actions/github-script@0.8.0
+        with:
+          script: |
+            ////////////////////////////////////
+            // retrieve workflow run data
+            ////////////////////////////////////
+
+            console.log("get workflow run")
+            const wf_run = await github.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: ${{ github.run_id }}
+            })
+            console.log(wf_run.data)
+            console.log("get jobs for workflow run:", wf_run.data.jobs_url)
+            const jobs_response = await github.request(wf_run.data.jobs_url)
+
+            ////////////////////////////////////
+            // build slack notification message
+            ////////////////////////////////////
+
+            // some utility functions
+            var date_diff_func = function(start, end) {
+                var duration = end - start
+                // format the duration
+                var delta = duration / 1000
+                var days = Math.floor(delta / 86400)
+                delta -= days * 86400
+                var hours = Math.floor(delta / 3600) % 24
+                delta -= hours * 3600
+                var minutes = Math.floor(delta / 60) % 60
+                delta -= minutes * 60
+                var seconds = Math.floor(delta % 60)
+                var format_func = function(v, text, check) {
+                    if (v <= 0 && check) {
+                        return ""
+                    } else {
+                        return v + text
+                    }
+                }
+                return format_func(days, "d", true) + format_func(hours, "h", true) + format_func(minutes, "m", true) + format_func(seconds, "s", false)
+            }
+            var status_icon_func = function(s) {
+                switch (s) {
+                case "w_success":
+                    return ":white_check_mark:"
+                case "w_failure":
+                    return ":no_entry:"
+                case "w_cancelled":
+                    return ":warning:"
+                case "success":
+                    return "\u2713"
+                case "failure":
+                    return "\u2717"
+                default:
+                    return "\u20e0"
+                }
+            }
+            const commit = "${{ github.sha }}".substr(0, 6)
+            var pr = ""
+            for (p of wf_run.data.pull_requests) {
+              pr += ",<"+ wf_run.data.repository.html_url + "/pull/" + p.number + "|#" + p.number + ">"
+            }
+            if (pr != "") {
+              pr = "for " + pr.substr(1)
+            }
+
+            // build the message
+            var fields = []
+            var is_wf_success = true
+            var is_wf_failure = false
+            for (j of jobs_response.data.jobs) {
+                console.log(j.name, ":", j.status, j.conclusion, j.started_at, j.completed_at)
+                // ignore the current job running this script
+                if (j.status != "completed") {
+                    continue
+                }
+                if (j.conclusion != "success") {
+                  is_wf_success = false
+                }
+                if (j.conclusion == "failure") {
+                  is_wf_failure = true
+                }
+                fields.push({
+                    type: "mrkdwn",
+                    text: status_icon_func(j.conclusion) + " <" + j.html_url + "|" + j.name + ">\n  \u21b3 completed in " + date_diff_func(new Date(j.started_at), new Date(j.completed_at))
+                })
+            }
+            var workflow_status = "w_cancelled"
+            if (is_wf_success) {
+              workflow_status = "w_success"
+            } else if (is_wf_failure) {
+              workflow_status = "w_failure"
+            }
+
+            var slack_msg = {
+                blocks: [
+                    {
+                        type: "section",
+                        text: {
+                            type: "mrkdwn",
+                            text: "<https://github.com/${{ github.repository }}|*${{ github.repository }}*>\nfrom *${{ github.ref }}@" + commit + "*"
+                        }
+                    },
+                    {
+                        type: "section",
+                        text: {
+                            type: "mrkdwn",
+                            text: status_icon_func(workflow_status) + " *${{ github.workflow }}* " + pr + "\nWorkflow run <" + wf_run.data.html_url + "|#${{ github.run_number }}> completed in " + date_diff_func(new Date(wf_run.data.created_at), new Date(wf_run.data.updated_at))
+                        }
+                    },
+                    {
+                        type: "divider"
+                    },
+                    {
+                        type: "section",
+                        fields: fields
+                    },
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": "commit " + wf_run.data.head_commit.id + "\n author: " + wf_run.data.head_commit.author.name + "\n " + wf_run.data.head_commit.message
+                            }
+                        ]
+                    }
+                ]
+            }
+            return slack_msg
+      - name: Send to Slack
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL}} -H "Content-type: application/json" --data '${{ steps.status.outputs.result }}'
